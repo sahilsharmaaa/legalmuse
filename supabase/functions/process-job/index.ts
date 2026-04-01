@@ -150,19 +150,35 @@ Input (${job.input_mode}): ${job.input_text}`,
       throw new Error("Empty AI response");
     }
 
-    // Determine output type
-    const outputTypeMap: Record<string, string> = {
-      linkedin: "linkedin_post",
-      short_video: "video_script",
-      youtube_long: "video_script",
-    };
+    // Determine output type and save
+    if (job.flow === "linkedin") {
+      await adminClient.from("job_outputs").insert({
+        job_id,
+        output_type: "linkedin_post",
+        content,
+      });
+    } else {
+      // For video flows, save the script AND a demo video
+      const videoUrls: Record<string, string> = {
+        short_video: "https://d990b259-68f4-4355-97f8-532ab033f81d.lovableproject.com/__l5e/assets-v1/1d8602a4-720c-4a97-a953-ee96ef866ccf/demo-short-video.mp4",
+        youtube_long: "https://d990b259-68f4-4355-97f8-532ab033f81d.lovableproject.com/__l5e/assets-v1/3c32420e-5e1a-4f2c-a7ac-d952132cacd1/demo-long-video.mp4",
+      };
 
-    // Save output
-    await adminClient.from("job_outputs").insert({
-      job_id,
-      output_type: outputTypeMap[job.flow] || "text",
-      content,
-    });
+      // Insert script
+      await adminClient.from("job_outputs").insert({
+        job_id,
+        output_type: "video_script",
+        content,
+      });
+
+      // Insert video reference
+      await adminClient.from("job_outputs").insert({
+        job_id,
+        output_type: "video",
+        file_path: videoUrls[job.flow] || videoUrls.short_video,
+        metadata: { demo: true, note: "POC demo video — personalized avatar videos available with HeyGen integration" },
+      });
+    }
 
     // Mark ready
     await adminClient.from("jobs").update({ status: "ready" }).eq("id", job_id);

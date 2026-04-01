@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, CheckCircle2, Send, Download, Loader2, AlertCircle, Copy } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Send, Download, Loader2, AlertCircle, Copy, Play } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   queued: 'bg-secondary text-muted-foreground',
@@ -61,6 +61,11 @@ export default function JobDetail() {
     </div>
   );
 
+  const videoOutput = outputs.find(o => o.output_type === 'video');
+  const scriptOutput = outputs.find(o => o.output_type === 'video_script');
+  const textOutput = outputs.find(o => o.output_type === 'linkedin_post');
+  const isVideoFlow = job.flow === 'short_video' || job.flow === 'youtube_long';
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -109,30 +114,52 @@ export default function JobDetail() {
         </div>
       )}
 
-      {/* Outputs */}
-      {outputs.length > 0 && (
-        <div>
-          <p className="text-[13px] font-semibold mb-3">Output</p>
-          <div className="space-y-3">
-            {outputs.map((output) => (
-              <div key={output.id} className="rounded-2xl bg-card border p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Badge variant="secondary" className="capitalize rounded-lg text-[11px]">{output.output_type.replace('_', ' ')}</Badge>
-                  {output.content && (
-                    <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={() => copyToClipboard(output.content)}>
-                      <Copy className="mr-1 h-3 w-3" /> Copy
-                    </Button>
-                  )}
-                </div>
-                {output.content && <p className="text-sm leading-relaxed whitespace-pre-wrap">{output.content}</p>}
-                {output.file_path && (
-                  <Button variant="outline" size="sm" className="rounded-xl">
-                    <Download className="mr-1.5 h-3.5 w-3.5" /> Download
-                  </Button>
-                )}
-              </div>
-            ))}
+      {/* Video Output */}
+      {videoOutput && (
+        <div className="space-y-3">
+          <p className="text-[13px] font-semibold flex items-center gap-2">
+            <Play className="h-4 w-4 text-primary" /> Generated Video
+          </p>
+          <div className="rounded-2xl overflow-hidden bg-black border">
+            <video
+              src={videoOutput.file_path}
+              controls
+              className={`w-full ${job.flow === 'short_video' ? 'max-h-[500px] mx-auto aspect-[9/16]' : 'aspect-video'}`}
+              playsInline
+              preload="metadata"
+            />
           </div>
+          {videoOutput.metadata?.demo && (
+            <p className="text-[11px] text-muted-foreground text-center italic">
+              POC demo video — personalized avatar videos available with HeyGen integration
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Script Output (for video flows) */}
+      {scriptOutput && (
+        <div className="rounded-2xl bg-card border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Badge variant="secondary" className="capitalize rounded-lg text-[11px]">Video Script</Badge>
+            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={() => copyToClipboard(scriptOutput.content)}>
+              <Copy className="mr-1 h-3 w-3" /> Copy Script
+            </Button>
+          </div>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{scriptOutput.content}</p>
+        </div>
+      )}
+
+      {/* Text Output (LinkedIn) */}
+      {textOutput && (
+        <div className="rounded-2xl bg-card border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Badge variant="secondary" className="capitalize rounded-lg text-[11px]">LinkedIn Post</Badge>
+            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={() => copyToClipboard(textOutput.content)}>
+              <Copy className="mr-1 h-3 w-3" /> Copy
+            </Button>
+          </div>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{textOutput.content}</p>
         </div>
       )}
 
