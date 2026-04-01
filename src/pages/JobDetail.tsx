@@ -40,7 +40,7 @@ export default function JobDetail() {
     return () => clearInterval(interval);
   }, [id]);
 
-  const updateStatus = async (status: string) => {
+  const updateStatus = async (status: 'queued' | 'running' | 'ready' | 'approved' | 'posted' | 'failed') => {
     if (!id) return;
     const { error } = await supabase.from('jobs').update({ status }).eq('id', id);
     if (error) {

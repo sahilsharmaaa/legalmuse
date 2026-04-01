@@ -35,7 +35,7 @@ export default function JobsList() {
     const fetchJobs = async () => {
       let query = supabase.from('jobs').select('*').order('created_at', { ascending: false });
       if (filter !== 'all') {
-        query = query.eq('status', filter);
+        query = query.eq('status', filter as 'queued' | 'running' | 'ready' | 'approved' | 'posted' | 'failed');
       }
       const { data } = await query;
       setJobs(data ?? []);
