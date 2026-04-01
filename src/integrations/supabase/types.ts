@@ -14,7 +14,146 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      content_profiles: {
+        Row: {
+          created_at: string
+          default_disclaimer: string
+          delhi_context_enabled: boolean
+          heygen_avatar_id: string | null
+          heygen_voice_id: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_disclaimer?: string
+          delhi_context_enabled?: boolean
+          heygen_avatar_id?: string | null
+          heygen_voice_id?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_disclaimer?: string
+          delhi_context_enabled?: boolean
+          heygen_avatar_id?: string | null
+          heygen_voice_id?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      job_outputs: {
+        Row: {
+          content: string | null
+          created_at: string
+          file_path: string | null
+          id: string
+          job_id: string
+          metadata: Json | null
+          output_type: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          file_path?: string | null
+          id?: string
+          job_id: string
+          metadata?: Json | null
+          output_type: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          file_path?: string | null
+          id?: string
+          job_id?: string
+          metadata?: Json | null
+          output_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_outputs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          created_at: string
+          dry_run: boolean
+          error: string | null
+          flow: Database["public"]["Enums"]["job_flow"]
+          id: string
+          input_mode: Database["public"]["Enums"]["input_mode"]
+          input_text: string
+          status: Database["public"]["Enums"]["job_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dry_run?: boolean
+          error?: string | null
+          flow: Database["public"]["Enums"]["job_flow"]
+          id?: string
+          input_mode: Database["public"]["Enums"]["input_mode"]
+          input_text: string
+          status?: Database["public"]["Enums"]["job_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dry_run?: boolean
+          error?: string | null
+          flow?: Database["public"]["Enums"]["job_flow"]
+          id?: string
+          input_mode?: Database["public"]["Enums"]["input_mode"]
+          input_text?: string
+          status?: Database["public"]["Enums"]["job_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_api_credentials: {
+        Row: {
+          created_at: string
+          credential_label: string | null
+          credential_type: string
+          encrypted_value: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credential_label?: string | null
+          credential_type: string
+          encrypted_value: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credential_label?: string | null
+          credential_type?: string
+          encrypted_value?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +162,15 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      input_mode: "url" | "topic" | "draft"
+      job_flow: "linkedin" | "short_video" | "youtube_long"
+      job_status:
+        | "queued"
+        | "running"
+        | "ready"
+        | "approved"
+        | "posted"
+        | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +297,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      input_mode: ["url", "topic", "draft"],
+      job_flow: ["linkedin", "short_video", "youtube_long"],
+      job_status: [
+        "queued",
+        "running",
+        "ready",
+        "approved",
+        "posted",
+        "failed",
+      ],
+    },
   },
 } as const
