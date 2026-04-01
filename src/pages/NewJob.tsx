@@ -5,9 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Linkedin, Video, Youtube, Sparkles, AlertTriangle, Check } from 'lucide-react';
+import { Linkedin, Video, Youtube, Sparkles, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -20,52 +19,97 @@ const inputModes: { id: InputMode; label: string; emoji: string }[] = [
   { id: 'draft', label: 'Draft', emoji: '📝' },
 ];
 
-const flows: { id: JobFlow; label: string; icon: typeof Linkedin; desc: string; requiredCreds: string[] }[] = [
-  { id: 'linkedin', label: 'LinkedIn Post', icon: Linkedin, desc: 'Text post with hook and CTA', requiredCreds: ['github_token'] },
-  { id: 'short_video', label: 'Short Video', icon: Video, desc: '45–60s avatar video', requiredCreds: ['github_token', 'heygen_api_key'] },
-  { id: 'youtube_long', label: 'YouTube Long', icon: Youtube, desc: '5–8 min with chapters', requiredCreds: ['github_token', 'heygen_api_key'] },
+const flows: { id: JobFlow; label: string; icon: typeof Linkedin; desc: string }[] = [
+  { id: 'linkedin', label: 'LinkedIn Post', icon: Linkedin, desc: 'Text post with hook and CTA' },
+  { id: 'short_video', label: 'Short Video Script', icon: Video, desc: '45–60s avatar video script' },
+  { id: 'youtube_long', label: 'YouTube Long Script', icon: Youtube, desc: '5–8 min with chapters' },
 ];
 
 export default function NewJob() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [inputMode, setInputMode] = useState<InputMode>('url');
+  const [inputMode, setInputMode] = useState<InputMode>('topic');
   const [inputText, setInputText] = useState('');
-  const [selectedFlows, setSelectedFlows] = useState<Set<JobFlow>>(new Set());
-  const [dryRun, setDryRun] = useState(false);
+  const [selectedFlow, setSelectedFlow] = useState<JobFlow | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [savedCreds, setSavedCreds] = useState<Set<string>>(new Set());
+  const [usedTrial, setUsedTrial] = useState(false);
+  const [checkingUsage, setCheckingUsage] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    supabase.from('user_api_credentials').select('credential_type').then(({ data }) => {
-      if (data) setSavedCreds(new Set(data.map((c) => c.credential_type)));
-    });
+    supabase
+      .from('jobs')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['ready', 'approved', 'posted', 'running', 'queued'])
+      .then(({ count }) => {
+        setUsedTrial((count ?? 0) >= 1);
+        setCheckingUsage(false);
+      });
   }, [user]);
-
-  const toggleFlow = (flow: JobFlow) => {
-    setSelectedFlows((prev) => { const n = new Set(prev); n.has(flow) ? n.delete(flow) : n.add(flow); return n; });
-  };
-
-  const missingCreds = (required: string[]) => required.filter((c) => !savedCreds.has(c));
 
   const handleSubmit = async () => {
     if (!inputText.trim()) { toast({ title: 'Enter content', variant: 'destructive' }); return; }
-    if (selectedFlows.size === 0) { toast({ title: 'Select a flow', variant: 'destructive' }); return; }
+    if (!selectedFlow) { toast({ title: 'Select a flow', variant: 'destructive' }); return; }
+    if (usedTrial) { toast({ title: 'Trial limit reached', description: 'You get 1 free generation in this POC.', variant: 'destructive' }); return; }
+
     setSubmitting(true);
-    const rows = Array.from(selectedFlows).map((flow) => ({
-      user_id: user!.id, flow, input_mode: inputMode, input_text: inputText.trim(), dry_run: dryRun, status: 'queued' as const,
-    }));
-    const { data, error } = await supabase.from('jobs').insert(rows).select();
+
+    const { data, error } = await supabase.from('jobs').insert({
+      user_id: user!.id,
+      flow: selectedFlow,
+      input_mode: inputMode,
+      input_text: inputText.trim(),
+      dry_run: true,
+      status: 'queued' as const,
+    }).select().single();
+
+    if (error || !data) {
+      setSubmitting(false);
+      toast({ title: 'Error', description: error?.message || 'Failed to create job', variant: 'destructive' });
+      return;
+    }
+
+    // Trigger processing
+    const { error: fnError } = await supabase.functions.invoke('process-job', {
+      body: { job_id: data.id },
+    });
+
     setSubmitting(false);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: `${data.length} job(s) created` }); navigate('/jobs'); }
+
+    if (fnError) {
+      toast({ title: 'Processing error', description: fnError.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Job created! Generating content...' });
+    }
+
+    navigate(`/jobs/${data.id}`);
   };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">New Job</h1>
+
+      {/* Trial banner */}
+      {usedTrial && !checkingUsage && (
+        <div className="flex items-center gap-3 rounded-2xl bg-destructive/10 border border-destructive/20 p-4">
+          <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+          <div>
+            <p className="text-sm font-semibold text-destructive">Trial limit reached</p>
+            <p className="text-xs text-muted-foreground">You've used your 1 free generation in this POC.</p>
+          </div>
+        </div>
+      )}
+
+      {!usedTrial && !checkingUsage && (
+        <div className="flex items-center gap-3 rounded-2xl bg-primary/10 border border-primary/20 p-4">
+          <Sparkles className="h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <p className="text-sm font-semibold text-primary">POC Trial</p>
+            <p className="text-xs text-muted-foreground">You have 1 free AI generation. No API keys needed — powered by Lovable AI.</p>
+          </div>
+        </div>
+      )}
 
       {/* Input mode picker */}
       <section>
@@ -101,24 +145,22 @@ export default function NewJob() {
         )}
       </section>
 
-      {/* Flow selection */}
+      {/* Flow selection — single select */}
       <section>
-        <p className="text-[13px] font-medium text-muted-foreground mb-2">Content flows</p>
+        <p className="text-[13px] font-medium text-muted-foreground mb-2">Choose a flow</p>
         <div className="space-y-2">
           {flows.map((flow) => {
-            const missing = missingCreds(flow.requiredCreds);
-            const disabled = missing.length > 0 && !dryRun;
-            const selected = selectedFlows.has(flow.id);
+            const selected = selectedFlow === flow.id;
             return (
               <button
                 key={flow.id}
                 type="button"
-                onClick={() => !disabled && toggleFlow(flow.id)}
-                disabled={disabled}
+                onClick={() => setSelectedFlow(flow.id)}
+                disabled={usedTrial}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98]',
                   selected ? 'border-primary bg-primary/5' : 'bg-card',
-                  disabled && 'opacity-50 cursor-not-allowed'
+                  usedTrial && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 <div className={cn(
@@ -130,11 +172,6 @@ export default function NewJob() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{flow.label}</p>
                   <p className="text-[11px] text-muted-foreground">{flow.desc}</p>
-                  {missing.length > 0 && (
-                    <p className="text-[11px] text-warning mt-1 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" /> Missing: {missing.join(', ')}
-                    </p>
-                  )}
                 </div>
                 {selected && <Check className="h-5 w-5 text-primary shrink-0" />}
               </button>
@@ -143,18 +180,14 @@ export default function NewJob() {
         </div>
       </section>
 
-      {/* Dry run */}
-      <div className="flex items-center justify-between rounded-2xl bg-card border p-4">
-        <div>
-          <p className="text-sm font-medium">Dry Run</p>
-          <p className="text-[11px] text-muted-foreground">Text only — no API costs</p>
-        </div>
-        <Switch checked={dryRun} onCheckedChange={setDryRun} />
-      </div>
-
-      <Button size="lg" className="w-full h-12 rounded-xl text-[15px] font-semibold" onClick={handleSubmit} disabled={submitting}>
+      <Button
+        size="lg"
+        className="w-full h-12 rounded-xl text-[15px] font-semibold"
+        onClick={handleSubmit}
+        disabled={submitting || usedTrial || checkingUsage}
+      >
         <Sparkles className="mr-2 h-4 w-4" />
-        {submitting ? 'Creating...' : 'Generate Content'}
+        {submitting ? 'Generating...' : 'Generate Content'}
       </Button>
 
       <p className="text-center text-[10px] text-muted-foreground">
