@@ -2,43 +2,28 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Linkedin, Video, Youtube, Sparkles, AlertTriangle, Link as LinkIcon, MessageSquare, FileText } from 'lucide-react';
+import { Linkedin, Video, Youtube, Sparkles, AlertTriangle, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Database } from '@/integrations/supabase/types';
 
 type JobFlow = Database['public']['Enums']['job_flow'];
 type InputMode = Database['public']['Enums']['input_mode'];
 
-const flows: { id: JobFlow; label: string; icon: typeof Linkedin; description: string; requiredCreds: string[] }[] = [
-  {
-    id: 'linkedin',
-    label: 'LinkedIn Post',
-    icon: Linkedin,
-    description: '1200–1500 char text post with hook, legal angle, and CTA',
-    requiredCreds: ['github_token'],
-  },
-  {
-    id: 'short_video',
-    label: 'Instagram Reel / YouTube Short',
-    icon: Video,
-    description: '45–60 sec avatar video with caption and hashtags',
-    requiredCreds: ['github_token', 'heygen_api_key'],
-  },
-  {
-    id: 'youtube_long',
-    label: 'YouTube Long-form',
-    icon: Youtube,
-    description: '5–8 min avatar video with 3 chapters and timestamps',
-    requiredCreds: ['github_token', 'heygen_api_key'],
-  },
+const inputModes: { id: InputMode; label: string; emoji: string }[] = [
+  { id: 'url', label: 'News URL', emoji: '🔗' },
+  { id: 'topic', label: 'Topic', emoji: '💬' },
+  { id: 'draft', label: 'Draft', emoji: '📝' },
+];
+
+const flows: { id: JobFlow; label: string; icon: typeof Linkedin; desc: string; requiredCreds: string[] }[] = [
+  { id: 'linkedin', label: 'LinkedIn Post', icon: Linkedin, desc: 'Text post with hook and CTA', requiredCreds: ['github_token'] },
+  { id: 'short_video', label: 'Short Video', icon: Video, desc: '45–60s avatar video', requiredCreds: ['github_token', 'heygen_api_key'] },
+  { id: 'youtube_long', label: 'YouTube Long', icon: Youtube, desc: '5–8 min with chapters', requiredCreds: ['github_token', 'heygen_api_key'] },
 ];
 
 export default function NewJob() {
@@ -54,148 +39,126 @@ export default function NewJob() {
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from('user_api_credentials')
-      .select('credential_type')
-      .then(({ data }) => {
-        if (data) setSavedCreds(new Set(data.map((c) => c.credential_type)));
-      });
+    supabase.from('user_api_credentials').select('credential_type').then(({ data }) => {
+      if (data) setSavedCreds(new Set(data.map((c) => c.credential_type)));
+    });
   }, [user]);
 
   const toggleFlow = (flow: JobFlow) => {
-    setSelectedFlows((prev) => {
-      const next = new Set(prev);
-      next.has(flow) ? next.delete(flow) : next.add(flow);
-      return next;
-    });
+    setSelectedFlows((prev) => { const n = new Set(prev); n.has(flow) ? n.delete(flow) : n.add(flow); return n; });
   };
 
-  const missingCreds = (requiredCreds: string[]) =>
-    requiredCreds.filter((c) => !savedCreds.has(c));
+  const missingCreds = (required: string[]) => required.filter((c) => !savedCreds.has(c));
 
   const handleSubmit = async () => {
-    if (!inputText.trim()) {
-      toast({ title: 'Enter content', description: 'Please provide a URL, topic, or draft.', variant: 'destructive' });
-      return;
-    }
-    if (selectedFlows.size === 0) {
-      toast({ title: 'Select flows', description: 'Pick at least one content flow.', variant: 'destructive' });
-      return;
-    }
-
+    if (!inputText.trim()) { toast({ title: 'Enter content', variant: 'destructive' }); return; }
+    if (selectedFlows.size === 0) { toast({ title: 'Select a flow', variant: 'destructive' }); return; }
     setSubmitting(true);
-
-    const jobRows = Array.from(selectedFlows).map((flow) => ({
-      user_id: user!.id,
-      flow,
-      input_mode: inputMode,
-      input_text: inputText.trim(),
-      dry_run: dryRun,
-      status: 'queued' as const,
+    const rows = Array.from(selectedFlows).map((flow) => ({
+      user_id: user!.id, flow, input_mode: inputMode, input_text: inputText.trim(), dry_run: dryRun, status: 'queued' as const,
     }));
-
-    const { data, error } = await supabase.from('jobs').insert(jobRows).select();
-
+    const { data, error } = await supabase.from('jobs').insert(rows).select();
     setSubmitting(false);
-
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Jobs created!', description: `${data.length} job(s) queued for processing.` });
-      navigate('/jobs');
-    }
+    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    else { toast({ title: `${data.length} job(s) created` }); navigate('/jobs'); }
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Create New Job</h1>
-        <p className="text-muted-foreground">Generate legal commentary content from a single trigger</p>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">New Job</h1>
 
-      {/* Input Mode */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Input Source</CardTitle>
-          <CardDescription>What's the trigger for this content?</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as InputMode)}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="url" className="gap-2"><LinkIcon className="h-3 w-3" /> News URL</TabsTrigger>
-              <TabsTrigger value="topic" className="gap-2"><MessageSquare className="h-3 w-3" /> Legal Topic</TabsTrigger>
-              <TabsTrigger value="draft" className="gap-2"><FileText className="h-3 w-3" /> Own Draft</TabsTrigger>
-            </TabsList>
-            <TabsContent value="url" className="mt-4">
-              <Input placeholder="https://example.com/legal-news-article" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-            </TabsContent>
-            <TabsContent value="topic" className="mt-4">
-              <Input placeholder="e.g., New data protection amendments in Delhi" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-            </TabsContent>
-            <TabsContent value="draft" className="mt-4">
-              <Textarea placeholder="Paste your draft content here..." rows={6} value={inputText} onChange={(e) => setInputText(e.target.value)} />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+      {/* Input mode picker */}
+      <section>
+        <p className="text-[13px] font-medium text-muted-foreground mb-2">Input source</p>
+        <div className="flex rounded-xl bg-secondary p-1">
+          {inputModes.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setInputMode(m.id)}
+              className={cn(
+                'flex-1 rounded-lg py-2.5 text-sm font-medium transition-all',
+                inputMode === m.id ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+              )}
+            >
+              {m.emoji} {m.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
-      {/* Flow Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Content Flows</CardTitle>
-          <CardDescription>Choose which outputs to generate</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* Input text */}
+      <section>
+        {inputMode === 'draft' ? (
+          <Textarea placeholder="Paste your draft content..." rows={5} className="rounded-xl bg-secondary border-0 text-sm resize-none" value={inputText} onChange={(e) => setInputText(e.target.value)} />
+        ) : (
+          <Input
+            placeholder={inputMode === 'url' ? 'https://example.com/article' : 'e.g., New data protection amendments in Delhi'}
+            className="h-12 rounded-xl bg-secondary border-0 text-[15px]"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+          />
+        )}
+      </section>
+
+      {/* Flow selection */}
+      <section>
+        <p className="text-[13px] font-medium text-muted-foreground mb-2">Content flows</p>
+        <div className="space-y-2">
           {flows.map((flow) => {
             const missing = missingCreds(flow.requiredCreds);
             const disabled = missing.length > 0 && !dryRun;
+            const selected = selectedFlows.has(flow.id);
             return (
-              <div
+              <button
                 key={flow.id}
-                className={`flex items-start gap-4 rounded-lg border p-4 transition-colors ${
-                  selectedFlows.has(flow.id) ? 'border-primary bg-primary/5' : disabled ? 'opacity-50' : 'hover:bg-muted/50'
-                }`}
+                type="button"
+                onClick={() => !disabled && toggleFlow(flow.id)}
+                disabled={disabled}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98]',
+                  selected ? 'border-primary bg-primary/5' : 'bg-card',
+                  disabled && 'opacity-50 cursor-not-allowed'
+                )}
               >
-                <Checkbox
-                  checked={selectedFlows.has(flow.id)}
-                  onCheckedChange={() => !disabled && toggleFlow(flow.id)}
-                  disabled={disabled}
-                />
-                <flow.icon className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="font-medium">{flow.label}</p>
-                  <p className="text-sm text-muted-foreground">{flow.description}</p>
+                <div className={cn(
+                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                  selected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+                )}>
+                  <flow.icon className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{flow.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{flow.desc}</p>
                   {missing.length > 0 && (
-                    <div className="mt-2 flex items-center gap-1 text-xs text-warning">
-                      <AlertTriangle className="h-3 w-3" />
-                      Missing: {missing.join(', ')} — configure in Settings
-                    </div>
+                    <p className="text-[11px] text-warning mt-1 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Missing: {missing.join(', ')}
+                    </p>
                   )}
                 </div>
-              </div>
+                {selected && <Check className="h-5 w-5 text-primary shrink-0" />}
+              </button>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      {/* Options */}
-      <Card>
-        <CardContent className="flex items-center justify-between pt-6">
-          <div>
-            <p className="font-medium">Dry Run Mode</p>
-            <p className="text-sm text-muted-foreground">Generate text only — skip video rendering and posting (no API costs)</p>
-          </div>
-          <Switch checked={dryRun} onCheckedChange={setDryRun} />
-        </CardContent>
-      </Card>
+      {/* Dry run */}
+      <div className="flex items-center justify-between rounded-2xl bg-card border p-4">
+        <div>
+          <p className="text-sm font-medium">Dry Run</p>
+          <p className="text-[11px] text-muted-foreground">Text only — no API costs</p>
+        </div>
+        <Switch checked={dryRun} onCheckedChange={setDryRun} />
+      </div>
 
-      <Button size="lg" className="w-full" onClick={handleSubmit} disabled={submitting}>
+      <Button size="lg" className="w-full h-12 rounded-xl text-[15px] font-semibold" onClick={handleSubmit} disabled={submitting}>
         <Sparkles className="mr-2 h-4 w-4" />
-        {submitting ? 'Creating Jobs...' : 'Generate Content'}
+        {submitting ? 'Creating...' : 'Generate Content'}
       </Button>
 
-      <p className="text-center text-xs text-muted-foreground">
-        All generated content is legal commentary for public awareness only — not legal advice.
+      <p className="text-center text-[10px] text-muted-foreground">
+        All content is legal commentary only — not legal advice.
       </p>
     </div>
   );
